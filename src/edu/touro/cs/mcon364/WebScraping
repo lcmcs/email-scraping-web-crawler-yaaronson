@@ -13,19 +13,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ *
+ * ******NOTE:***
+ * THE FIRST 10K EMAILS DO NOT HAVE A SOURCE PROPERLY IMPLEMENTED FOR THEM IN THE DB, I ONLY REALIZED
+ * THIS ISSUE AFTER I ALREADY GOT ALL THE EMAILS.
+ *
+ * SO INSTEAD OF REDOING EVERYTHING I JUST SWITCHED AROUND SOME CODE AND RERAN
+ * THE PROGRAM AND GOT THE SOURCES FOR THE NEW EMAILS (NOT ANOTHER 10K I DID A SMALLER AMOUNT)
+ *
+ * SO IF YOU LOOK AT THE EMAILS STARTING AFTER THE 10K MARK YOU WILL SEE THAT THEY HAVE THE
+ * SOURCES COLUMN WITH THE PROPER URL'S.
+ *
+ *
+ */
 
 public class WebScraping {
 
     static Queue<String> queueLink = new ConcurrentLinkedQueue<>();
     static Set<String> visitedLinks = Collections.synchronizedSet(new HashSet<>());
-    static Set<String> emails = Collections.synchronizedSet(new HashSet<>());
+    static Map<String, String> emailsSource = Collections.synchronizedMap(new HashMap<String, String>());
 
 
     public static void main(String[] args) throws Exception {
         Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "*** Web Scraping With Multi threading***");
         queueLink.add("https://www.touro.edu/");
-        ExecutorService es = Executors.newFixedThreadPool(10);
-        while ( emails.size() < 10 ){
+        ExecutorService es = Executors.newFixedThreadPool(70);
+        while ( emailsSource.size() < 200 ){
             es.submit(new Threading());
             Thread.sleep(1);
         }
@@ -43,7 +57,7 @@ public class WebScraping {
             es.shutdownNow();
         }
         Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "Heading TO DB");
-        DataBaseConnection.ConnectingDB(emails);
+        DataBaseConnection.ConnectingDB(emailsSource);
     }
 
 }
@@ -54,8 +68,10 @@ class Threading implements Runnable {
     @Override
     public void run() {
         Document doc = null;
+        String source = WebScraping.queueLink.poll();
         try {
-            doc = Jsoup.connect(WebScraping.queueLink.poll()).get();
+            doc = Jsoup.connect(source).get();
+
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -66,7 +82,7 @@ class Threading implements Runnable {
             Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "Regex");
             if (href.matches("^mailto:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
                 System.out.println(href);
-                WebScraping.emails.add(href);
+                WebScraping.emailsSource.put(href, source);
             } else {
                 if (WebScraping.visitedLinks.contains(href)) {
                     continue;
@@ -79,11 +95,12 @@ class Threading implements Runnable {
     }
 }
 
+
 /**
  * PSEUDOCODE:
  *
  *
- * Create an empty queue and 2 synchronized hashsets
+ * Create a queue, synchronized hashset and synchronized Hashmap
  *
  * Add the first URL "https://www.touro.edu/" to the queue
  *
@@ -96,7 +113,7 @@ class Threading implements Runnable {
  * Once we get the emails and add it to our set, connect to the DB class and insert them into
  *  my DB
  *
- * In the DB class, bulk save all the Emails to the DB.
+ * In the DB class, bulk save all the Emails/sources to the DB.
  *
  * (Logging statements implemented throughout the code)
  *
