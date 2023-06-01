@@ -3,12 +3,11 @@ package edu.touro.cs.mcon364;
 import java.sql.*;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class DataBaseConnection {
-    public static void ConnectingDB(Set<String> emails) throws ClassNotFoundException {
+    public static void ConnectingDB(Map<String, String> emails) throws ClassNotFoundException {
         Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "Connecting to DB");
         Map<String, String> env = System.getenv();
         String endpoint = env.get("dbendpoint");
@@ -26,10 +25,10 @@ public class DataBaseConnection {
         Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
 
         Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "*** INSERTING INTO DB***");
-        StringBuilder builder = new StringBuilder("INSERT INTO Emails (EmailAddress) VALUES (?)");
+        StringBuilder builder = new StringBuilder("INSERT INTO Emails (EmailAddress, Source) VALUES (?,?)");
         int emailCount = emails.size();
         for (int i = 0; i < emails.size() - 1; i++) {
-            builder.append(",(?)");
+            builder.append(",(?,?)");
         }
 
         Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "*** STRING BUILDER ***");
@@ -37,9 +36,12 @@ public class DataBaseConnection {
         try (Connection connection = DriverManager.getConnection(connectionUrl);
              PreparedStatement prepsInsertProduct = connection.prepareStatement(insertSql2, Statement.RETURN_GENERATED_KEYS);) {
             {
-                Iterator<String> set = emails.iterator();
-                for (int i = 0; i < emails.size(); i++){
-                    prepsInsertProduct.setString(i+1, set.next());
+                Iterator<Map.Entry<String, String>> set = emails.entrySet().iterator();
+                for (int i = 0; i < emails.size() * 2; i++){
+                    Map.Entry<String, String> sourcing = set.next();
+                    prepsInsertProduct.setString(i+1, sourcing.getKey());
+                    i++;
+                    prepsInsertProduct.setString(i+1, sourcing.getValue());
                 }
                 prepsInsertProduct.execute();
 
