@@ -1,0 +1,120 @@
+package edu.touro.cs.mcon364;
+
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ *
+ * ******NOTE:***
+ * THE FIRST 10K EMAILS DO NOT HAVE A SOURCE PROPERLY IMPLEMENTED FOR THEM IN THE DB, I ONLY REALIZED
+ * THIS ISSUE AFTER I ALREADY GOT ALL THE EMAILS.
+ *
+ * SO INSTEAD OF REDOING EVERYTHING I JUST SWITCHED AROUND SOME CODE AND RERAN
+ * THE PROGRAM AND GOT THE SOURCES FOR THE NEW EMAILS (NOT ANOTHER 10K I DID A SMALLER AMOUNT)
+ *
+ * SO IF YOU LOOK AT THE EMAILS STARTING AFTER THE 10K MARK YOU WILL SEE THAT THEY HAVE THE
+ * SOURCES COLUMN WITH THE PROPER URL'S.
+ *
+ *
+ */
+
+public class WebScraping {
+
+    static Queue<String> queueLink = new ConcurrentLinkedQueue<>();
+    static Set<String> visitedLinks = Collections.synchronizedSet(new HashSet<>());
+    static Map<String, String> emailsSource = Collections.synchronizedMap(new HashMap<String, String>());
+
+
+    public static void main(String[] args) throws Exception {
+        Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "*** Web Scraping With Multi threading***");
+        queueLink.add("https://www.touro.edu/");
+        ExecutorService es = Executors.newFixedThreadPool(70);
+        while ( emailsSource.size() < 200 ){
+            es.submit(new Threading());
+            Thread.sleep(1);
+        }
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        es.shutdown();
+
+        try {
+            if (!es.awaitTermination(1_000, TimeUnit.MILLISECONDS))
+                es.shutdownNow();
+        } catch (InterruptedException e) {
+            es.shutdownNow();
+        }
+        Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "Heading TO DB");
+        DataBaseConnection.ConnectingDB(emailsSource);
+    }
+
+}
+
+
+class Threading implements Runnable {
+
+    @Override
+    public void run() {
+        Document doc = null;
+        String source = WebScraping.queueLink.poll();
+        try {
+            doc = Jsoup.connect(source).get();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "EMAILS");
+        Elements newsHeadlines = doc.select("a[href]");
+        for (Element headline : newsHeadlines) {
+            String href = headline.attr("href");
+            Logger.getLogger(WebScraping.class.getName()).log(Level.INFO, "Regex");
+            if (href.matches("^mailto:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
+                System.out.println(href);
+                WebScraping.emailsSource.put(href, source);
+            } else {
+                if (WebScraping.visitedLinks.contains(href)) {
+                    continue;
+                } else {
+                    WebScraping.queueLink.add(href);
+                    WebScraping.visitedLinks.add(href);
+                }
+            }
+        }
+    }
+}
+
+
+/**
+ * PSEUDOCODE:
+ *
+ *
+ * Create a queue, synchronized hashset and synchronized Hashmap
+ *
+ * Add the first URL "https://www.touro.edu/" to the queue
+ *
+ * Make a loop that continues until the number of emails found reaches a certain amount
+ * In the loop, get the next URL from the queue and search the page for emails using the regex formatting
+ * For each email we get, check if it is in a valid format and add it to the email set
+ * Keep track of the links that have already been searched by adding them to a set
+ * and check if we already went to that link
+ *
+ * Once we get the emails and add it to our set, connect to the DB class and insert them into
+ *  my DB
+ *
+ * In the DB class, bulk save all the Emails/sources to the DB.
+ *
+ * (Logging statements implemented throughout the code)
+ *
+ */
